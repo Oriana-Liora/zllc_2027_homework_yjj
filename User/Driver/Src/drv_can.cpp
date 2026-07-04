@@ -55,6 +55,15 @@ uint8_t CAN2_Gimbal_Tx_Chassis_Data_1[8]; // 云台给底盘发送缓冲区
 uint8_t CAN2_Chassis_Tx_Gimbal_Data_1[8]; // 底盘给云台发送缓冲区
 uint8_t CAN2_Gimbal_Tx_Chassis_Data_2[8]; // 云台给底盘发送缓冲区
 
+uint8_t CAN3_Chassis_Tx_Gimbal_Data[8];   //底盘给云台发送缓冲区
+uint8_t CAN3_Gimbal_Tx_Chassis_Data[8];  //云台给底盘发送缓冲区
+uint8_t CAN3_Chassis_Tx_Gimbal_Data_1[8];   //底盘给云台发送缓冲区
+uint8_t CAN3_Gimbal_Tx_Chassis_Data_1[8];  //云台给底盘发送缓冲区
+uint8_t CAN3_Sentry_CMD_Data[8];   //云台给底盘发送缓冲区
+
+
+
+
 uint8_t CAN3_0x1ff_Tx_Data[8];
 uint8_t CAN3_0x1fe_Tx_Data[8];
 uint8_t CAN3_0x200_Tx_Data[8];
@@ -344,10 +353,8 @@ void TIM_CAN_PeriodElapsedCallback()
         mod2 = 0;
         if (flag2 == 0) 
         {
-            // 轮向 3508
-            CAN_Send_Data(&hfdcan1, 0x200, CAN1_0x200_Tx_Data, 8);
-            // 舵向 3508
-            CAN_Send_Data(&hfdcan1, 0x1ff, CAN1_0x1ff_Tx_Data, 8);
+            CAN_Send_Data(&hfdcan1, 0x200, CAN1_0x200_Tx_Data, 8); // 行进3508电机
+            
         }
         else
         {
@@ -381,32 +388,70 @@ void TIM_CAN_PeriodElapsedCallback()
     #elif defined (GIMBAL)
         // CAN_Send_Data(&hfdcan2, 0x141, CAN2_0x141_Tx_Data, 8);
         //CAN_Send_Data(&hfdcan2, 0xf1, CAN2_0xxf1_Tx_Data, 8);
-
-    static uint8_t mod5 = 0,mod2 = 0,mod10 = 0;
+    static uint8_t mod5 = 0,mod4 = 0,mod3 = 0,mod20 = 0,mod10 = 0;
     mod5++;
+    mod4++;
+	mod3++;
+    mod20++;
+	mod10++;
+    static uint8_t mod2 = 0;
     mod2++;
-    mod10++;
+
     
-    if(mod5 == 5)
+    if(mod5 == 5)//200Hz
     {
         mod5 = 0;
-        CAN_Send_Data(&hfdcan2, 0x77, CAN2_Gimbal_Tx_Chassis_Data, 8); //给底盘发送控制命令 按照0x77 ID 发送
-        CAN_Send_Data(&hfdcan2, 0x78, CAN2_Gimbal_Tx_Chassis_Data_1, 8);
+        //CAN_Send_Data(&hfdcan2, 0x77, CAN2_Gimbal_Tx_Chassis_Data, 8); //给底盘发送控制命令 按照0x77 ID 发送
+        //CAN_Send_Data(&hfdcan2, 0x78, CAN2_Gimbal_Tx_Chassis_Data_1, 8);
+        
+        CAN_Send_Data(&hfdcan3, 0x52, CAN3_Gimbal_Tx_Chassis_Data, 8); //给底盘发送控制命令
         
     }
 
-    if(mod2 == 2)
+    if(mod2 == 2)//500Hz
     {
         CAN_Send_Data(&hfdcan2, 0xf1, CAN2_0xxf1_Tx_Data, 8);
         CAN_Send_Data(&hfdcan1, 0xa0, CAN1_MiniPc_Tx_Data, 8);
 			  //CAN_Send_Data(&hfdcan2, 0xf1, CAN2_0xxf1_Tx_Data, 8);
         mod2 = 0;
     } 
-    
-    if (mod10 == 10) //100Hz
+    if (mod10 == 10 ) //100Hz
     {
+		CAN_Send_Data(&hfdcan3, 0x78, CAN3_Gimbal_Tx_Chassis_Data_1, 8);
         mod10 = 0;
     }
+    /*
+    if(mod5 == 4  || mod5 == 2 )
+    {
+        CAN_Send_Data(&hfdcan3,0x03,CAN3_0xxf3_Tx_Data,8);// YAW
+    }
+    if(mod5 == 3 )
+    {
+        CAN_Send_Data(&hfdcan3, 0x200, CAN3_0x200_Tx_Data, 8); //拨弹盘  按照0x200 ID 发送 可控制多个电机
+    }
+
+    if(mod4 == 4)
+    {
+        // CAN_Send_Data(&hfdcan1, 0xa0, CAN1_MiniPc_Tx_Data, 8); // 上位机
+        mod4 = 0;
+    }
+    if(mod3 == 3)
+    {
+    
+        mod3 = 0;
+    }   
+    if (mod10 == 10 ) //100Hz
+    {
+		CAN_Send_Data(&hfdcan3, 0x78, CAN3_Gimbal_Tx_Chassis_Data_1, 8);
+        mod10 = 0;
+    }
+    if(mod20 == 20) //50Hz
+    {
+        
+        mod20 = 0;
+    }*/
+
+
 
     #endif
 

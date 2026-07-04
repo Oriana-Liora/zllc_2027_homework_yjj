@@ -109,6 +109,8 @@ struct Struct_DM_Motor_Rx_Data
     Enum_DM_Motor_ID CAN_ID;
     Enum_DM_Motor_ErrorCode ErrorCode;
     float Now_Angle;
+    float Now_Radian;//数据处理可能还没有处理过
+    float Now_Angle_Deg;
     float Now_Omega;
     float Now_Torque;
     float Now_MOS_Temperature;
@@ -139,6 +141,7 @@ public:
     inline Enum_DM_Motor_Control_Status Get_DM_Motor_Control_Status();
     inline Enum_DM_Motor_Status Get_DM_Motor_Status();
     inline float Get_Now_Angle();
+    inline float Get_Now_Angle_Deg();
     inline float Get_Now_Radian();
     inline float Get_Now_Omega();
     inline float Get_Now_Torque();
@@ -250,6 +253,14 @@ Enum_DM_Motor_Status Class_DM_Motor_J4310::Get_DM_Motor_Status()
 float Class_DM_Motor_J4310::Get_Now_Angle()
 {
     return (Data.Now_Angle);
+}
+float Class_DM_Motor_J4310::Get_Now_Radian()
+{
+    return (Data.Now_Radian);
+}
+float Class_DM_Motor_J4310::Get_Now_Angle_Deg()
+{
+    return (Data.Now_Angle_Deg);
 }
 
 /**

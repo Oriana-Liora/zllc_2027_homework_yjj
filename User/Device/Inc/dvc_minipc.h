@@ -258,6 +258,10 @@ public:
     inline float Get_Distance();
     inline Enum_MiniPC_Move_Control_Mode Get_Move_Control_Mode();
 
+    inline uint8_t Get_Lidar_Lob_Stability();
+
+
+
     inline void Set_Game_Stage(Enum_MiniPC_Game_Stage __Game_Stage);
     inline void Set_Chassis_Now_Velocity_X(float __Chassis_Now_Velocity_X);
     inline void Set_Chassis_Now_Velocity_Y(float __Chassis_Now_Velocity_Y);
@@ -271,6 +275,9 @@ public:
     inline void Set_Self_Color(Enum_MiniPC_Self_Color __Self_Color);
     inline void Set_Outpost_Status(Enum_MiniPC_Data_Status __Outpost_Status);
     inline void Set_Outpost_Protect_Status(Enum_MiniPC_Data_Status __Outpost_Protect_Status);
+
+    inline void Set_Bullet_Num(uint16_t __Bullet_Num);
+
     //inline void Set_Antispin_Type(Enum_Antispin_Type __Antispin_Type);
     void Append_CRC16_Check_Sum(uint8_t *pchMessage, uint32_t dwLength);
     bool Verify_CRC16_Check_Sum(const uint8_t *pchMessage, uint32_t dwLength);
@@ -322,6 +329,9 @@ protected:
     Enum_MiniPC_Status MiniPC_Status = MiniPC_Status_DISABLE;
     // 迷你主机对外接口信息
     Struct_MiniPC_Rx_Data Data_NUC_To_MCU;
+
+    uint16_t Tx_Bullet_Num;
+
    
     Pack_tx_t Pack_Tx_CAN;
     Pack_rx_t Pack_Rx;
@@ -337,6 +347,8 @@ protected:
 
     uint8_t Fire;
     uint8_t alive;
+
+    uint8_t Lidar_Lob_Stability;    // 部署命中可信度
 
     const float g = 9.8;         // 重力加速度
     const float bullet_v = 21.7; // 子弹速度
@@ -522,6 +534,20 @@ inline uint8_t Class_MiniPC::Get_Alive_Status()
 }
 
 /**
+ * @brief 获取雷达部署命中可信度
+ * 
+ * @return uint8_t 
+ */
+inline uint8_t Class_MiniPC::Get_Lidar_Lob_Stability()
+{
+    return Lidar_Lob_Stability;
+}
+
+
+
+
+
+/**
  * @brief
  *
  * @param __Game_Stage
@@ -650,6 +676,16 @@ void Class_MiniPC::Set_Outpost_Status(Enum_MiniPC_Data_Status __Outpost_Status)
 void Class_MiniPC::Set_Outpost_Protect_Status(Enum_MiniPC_Data_Status __Outpost_Protect_Status)
 {
     Data_MCU_To_NUC.Outpost_Protect_Status_Enum = __Outpost_Protect_Status;
+}
+
+/**
+ * @brief 设定子弹发射数量
+ * 
+ * @param __Bullet_Num 
+ */
+void Class_MiniPC::Set_Bullet_Num(uint16_t __Bullet_Num)
+{
+    Tx_Bullet_Num = __Bullet_Num;
 }
 
 /**

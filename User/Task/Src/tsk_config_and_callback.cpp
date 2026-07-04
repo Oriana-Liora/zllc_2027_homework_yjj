@@ -98,26 +98,7 @@ void Chassis_Device_CAN1_Callback(Struct_CAN_Rx_Buffer *CAN_RxMessage)
         break;	
 		
 
-        case (0x202):
-        {
-            chariot.Chassis.Motor_Steer[0].CAN_RxCpltCallback(CAN_RxMessage->Data);
-        }
-        break;
-        case (0x204):
-        {
-            chariot.Chassis.Motor_Steer[1].CAN_RxCpltCallback(CAN_RxMessage->Data);
-        }
-        break;					
-        case (0x206):
-        {
-            chariot.Chassis.Motor_Steer[2].CAN_RxCpltCallback(CAN_RxMessage->Data);
-        }
-        break;
-        case (0x208):
-        {
-            chariot.Chassis.Motor_Steer[3].CAN_RxCpltCallback(CAN_RxMessage->Data);
-        }
-        break;						
+       
     }
 }
 #endif
@@ -136,17 +117,17 @@ void Chassis_Device_CAN2_Callback(Struct_CAN_Rx_Buffer *CAN_RxMessage)
     {
         case (0x77): // 留给上板通讯
         {
-            chariot.CAN_Chassis_Rx_Gimbal_Callback(CAN_RxMessage->Data);
+            //chariot.CAN_Chassis_Rx_Gimbal_Callback(CAN_RxMessage->Data);
         }
         break;
         case (0x78):
         {
-            chariot.CAN_Chassis_Rx_Gimbal_Callback_1();
+            //chariot.CAN_Chassis_Rx_Gimbal_Callback_1();
         }
         break;
         case (0x79):
         {
-            chariot.CAN_Chassis_Rx_Gimbal_Callback_2();
+            //chariot.CAN_Chassis_Rx_Gimbal_Callback_2();
         }
         break;						
         case(0x141)://给yaw进行通信
@@ -154,7 +135,7 @@ void Chassis_Device_CAN2_Callback(Struct_CAN_Rx_Buffer *CAN_RxMessage)
             if(CAN_RxMessage->Data[1] != 0)
             {
                 DtYAW = 1.0f/DWT_GetDeltaT(&last_cntyaw);
-                chariot.Motor_Yaw.CAN_RxCpltCallback(CAN_RxMessage->Data);
+                //chariot.Motor_Yaw.CAN_RxCpltCallback(CAN_RxMessage->Data);
             }
             if(DtYAW < 20)
             {
@@ -170,14 +151,33 @@ void Chassis_Device_CAN2_Callback(Struct_CAN_Rx_Buffer *CAN_RxMessage)
 #ifdef CHASSIS
 void Chassis_Device_CAN3_Callback(Struct_CAN_Rx_Buffer *CAN_RxMessage)
 {
+     switch (CAN_RxMessage->Header.Identifier)
+    {
 
+        case (0x52)://留给上板通讯
+        {
+            chariot.CAN_Chassis_Rx_Gimbal_Callback();
+            break;
+        }
+        case (0x78):
+        {
+            chariot.CAN_Chassis_Rx_Gimbal_Callback_1();
+            break;
+        }
+        //case (0x13):
+        //{
+           // chariot.Motor_Yaw_DM4310.CAN_RxCpltCallback(CAN_RxMessage->Data);
+           // break;
+        //}
+        
+    }
 }
 #endif
 
 #ifdef GIMBAL
 /**
  * @brief Gimbal_CAN1回调函数.按照结构划分，在云台上部存在MiniPC、两个摩擦轮以及Pitch电机
- * @brief MiniPC直接绑定CAN1通道，不按照形参顺序走 
+ * @brief MiniPC直接绑定CAN1通道，不按照形参顺序走
  * @param CAN_RxMessage CAN1收到的消息
  */
 void Gimbal_Device_CAN1_Callback(Struct_CAN_Rx_Buffer *CAN_RxMessage)
@@ -387,7 +387,7 @@ void Task100us_TIM4_Callback()
         //Task_Loop();
         Referee_Sand_Cnt = 0;
     }
-    chariot.Boardc_BMI.TIM_Calculate_PeriodElapsedCallback();
+    //chariot.Boardc_BMI.TIM_Calculate_PeriodElapsedCallback();
     #elif defined(GIMBAL)
     // 单给IMU消息开的定时器 ims
     Dtm = 1.0f/DWT_GetDeltaT(&last_cntm);
@@ -470,9 +470,9 @@ void Task1ms_TIM5_Callback()
         if (mod5 == 10) // 上下板通信 100hz
         {
         #ifdef GIMBAL
-            // 给下板发送数据
-            chariot.CAN_Gimbal_Tx_Chassis_Callback();
-            chariot.CAN_Gimbal_Tx_Chassis_Callback_1();
+            // 给下板发送数据（移到上面的chariot.TIM_Calculate_PeriodElapsedCallback();）
+            //chariot.CAN_Gimbal_Tx_Chassis_Callback();
+            //chariot.CAN_Gimbal_Tx_Chassis_Callback_1();
         #elif defined(CHASSIS)
             // 底盘给云台发消息
             chariot.CAN_Chassis_Tx_Gimbal_Callback();
@@ -596,7 +596,7 @@ extern "C" void Task_Init()
         JudgeReceiveData.Chassis_Control_Type = chariot.Chassis.Get_Chassis_Control_Type();
         JudgeReceiveData.Pitch_Angle = chariot.Gimbal_Tx_Pitch_Angle; // pitch角度
         JudgeReceiveData.Supercap_Voltage = chariot.Chassis.Supercap.Get_Supercap_Charge_Percentage(); // 超电电压百分比
-        JudgeReceiveData.Chassis_Gimbal_Diff = chariot.Motor_Yaw.Get_Now_Angle(); // 底盘角度    
+        JudgeReceiveData.Chassis_Gimbal_Diff = chariot.Motor_Yaw_DM4310.Get_Now_Angle(); // 底盘角度    
 
         if (chariot.Referee_UI_Refresh_Status == Referee_UI_Refresh_Status_ENABLE)
             Init_Cnt = 255;
