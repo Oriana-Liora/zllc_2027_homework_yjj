@@ -346,6 +346,12 @@ void Class_HybridTrackLeg_Chassis::TIM_Calculate_PeriodElapsedCallback(Enum_Spri
 #endif
     // 过温保护
     // FSM_OverHeated_Detect.Reload_TIM_Status_PeriodElapsedCallback();
+    // Chassis_SglRound_Angle = Get_Chassis_Coordinate_System_Angle_Rad();
+    // // 底盘给云台发消息
+    // CAN_Chassis_Tx_Gimbal_Callback();
+    // CAN_Chassis_Tx_Gimbal_Callback_1();
+    // // 底盘Omega控制
+    // Control_Chassis_Omega_TIM_PeriodElapsedCallback();
     Speed_Resolution();
     // 位姿切换
     //Switch_Pose();

@@ -52,7 +52,8 @@
 /* Private types -------------------------------------------------------------*/
 
 /* Private variables ---------------------------------------------------------*/
-
+uint32_t last_cnt_1 ,last_cnt_2 ,last_cnt_3;
+float dt_receive1,dt_receive2,dt_receive3;
 uint32_t init_finished =0 ;
 bool start_flag=0;
 //机器人控制对象
@@ -184,21 +185,46 @@ void Gimbal_Device_CAN1_Callback(Struct_CAN_Rx_Buffer *CAN_RxMessage)
 {
     switch (CAN_RxMessage->Header.Identifier)
     {
-        case(0x201):
-        {
-            chariot.Booster.Motor_Friction_Left.CAN_RxCpltCallback(CAN_RxMessage->Data);
-        }
-		break;
-		case(0x202):
-		{
-			chariot.Booster.Motor_Friction_Right.CAN_RxCpltCallback(CAN_RxMessage->Data);
-		}
-		break;
-        case (0xa1):
-        {
-            chariot.MiniPC.CAN_RxCpltCallback(CAN_RxMessage->Data);
-        }
-        break;
+    case (0xA1):
+    {
+        
+        chariot.MiniPC.CAN_RxCpltCallback(CAN_RxMessage->Data);
+    }
+    break;
+    #ifdef Single_Friction
+    case (0x201):
+    {
+        chariot.Booster.Motor_Friction_Right.CAN_RxCpltCallback(CAN_RxMessage->Data);
+    }
+    break;
+    case (0x203):
+    {
+        chariot.Booster.Motor_Friction_Left.CAN_RxCpltCallback(CAN_RxMessage->Data);
+    }
+    break;
+    #endif
+    #ifdef Double_Friction
+    case (0x201):
+    {
+        chariot.Booster.Fric[0].CAN_RxCpltCallback(CAN_RxMessage->Data);
+    }
+    break;
+    case (0x202):
+    {
+        chariot.Booster.Fric[1].CAN_RxCpltCallback(CAN_RxMessage->Data);
+    }
+	break;
+    case (0x203):
+    {
+        chariot.Booster.Fric[2].CAN_RxCpltCallback(CAN_RxMessage->Data);
+    }
+    break;
+    case (0x204):
+    {
+        chariot.Booster.Fric[3].CAN_RxCpltCallback(CAN_RxMessage->Data);
+    }
+    break;
+    #endif
 	}
 }
 
@@ -260,13 +286,38 @@ void Gimbal_Device_CAN2_Callback(Struct_CAN_Rx_Buffer *CAN_RxMessage)
  * @brief 底盘和云台的交互层，ita_chariot.h中直接绑定了CAN3
  * @param CAN_RxMessage CAN3收到的消息
  */
-void Gimbal_Device_CAN3_Callback(Struct_CAN_Rx_Buffer *CAN_RxMessage){
+void Gimbal_Device_CAN3_Callback(Struct_CAN_Rx_Buffer *CAN_RxMessage)
+{
     switch (CAN_RxMessage->Header.Identifier)
+{
+        switch (CAN_RxMessage->Header.Identifier)
     {
-        // case (0x11):
-		// 		{
-		// 				chariot.Gimbal.DM_IMU.IMU_UpdateData(CAN_RxMessage->Data);
-		// 		}                          
+    case (0x51): //留给下板通讯
+    {
+       
+        chariot.CAN_Gimbal_Rx_Chassis_Callback();
+    }
+    break;
+    case (0x20):
+    {
+        dt_receive2 = DWT_GetDeltaT(&last_cnt_2);
+        chariot.CAN_Gimbal_Rx_Chassis_Callback_1();
+    }
+    break;
+    case (0x13):
+    {
+         dt_receive1 = DWT_GetDeltaT(&last_cnt_1);
+        chariot.Gimbal.Motor_Yaw_DM4310.CAN_RxCpltCallback(CAN_RxMessage->Data);
+        // chariot.Gimbal.Motor_Yaw.CAN_RxCpltCallback(CAN_RxMessage->Data);
+    }
+    break;
+    case (0x203):
+    {
+        dt_receive3 = DWT_GetDeltaT(&last_cnt_3);
+        chariot.Booster.Motor_Driver.CAN_RxCpltCallback(CAN_RxMessage->Data);
+    }
+    break;
+	}               
 	  }
 }
 #endif
@@ -470,13 +521,10 @@ void Task1ms_TIM5_Callback()
         if (mod5 == 10) // 上下板通信 100hz
         {
         #ifdef GIMBAL
-            // 给下板发送数据（移到上面的chariot.TIM_Calculate_PeriodElapsedCallback();）
-            //chariot.CAN_Gimbal_Tx_Chassis_Callback();
-            //chariot.CAN_Gimbal_Tx_Chassis_Callback_1();
+            // 上下板互相发送数据（移到上面的chariot.TIM_Calculate_PeriodElapsedCallback();）
+            
         #elif defined(CHASSIS)
-            // 底盘给云台发消息
-            chariot.CAN_Chassis_Tx_Gimbal_Callback();
-            chariot.CAN_Chassis_Tx_Gimbal_Callback_1();
+            
             //更新UI时间
 //            UI_Refresh ++;
 //            if (UI_Refresh == 300)

@@ -225,7 +225,8 @@ public:
     void Init(float __DR16_Dead_Zone = 0);
 
 #ifdef CHASSIS
-
+    float Get_Chassis_Coordinate_System_Angle_Rad();
+    void Control_Chassis_Omega_TIM_PeriodElapsedCallback();
     void CAN_Chassis_Rx_Gimbal_Callback();
     void CAN_Chassis_Tx_Gimbal_Callback();
     void CAN_Chassis_Rx_Gimbal_Callback_1();
@@ -318,6 +319,8 @@ protected:
     float Offset_Angle = 0.0f; // 7.5°
     // 底盘转换后的角度（数据来源yaw电机）
     float Chassis_Angle;
+    //化归为-PI到PI后的底盘角度
+    float Chassis_SglRound_Angle;
     //获取云台的IMU yaw轴角度
         float Yaw_IMU_Angle;
         float Pitch_IMU_Angle;
@@ -414,6 +417,23 @@ protected:
 /* Exported variables --------------------------------------------------------*/
 
 /* Exported function declarations --------------------------------------------*/
+
+
+#ifdef GIMBAL
+void Class_Referee::Set_Booster_42mm_Heat_Max(uint16_t __Booster_42mm_Heat_Max)
+{
+    this->Robot_Status.Shooter_Barrel_Heat_Limit = __Booster_42mm_Heat_Max;
+}
+
+
+void Class_Referee::Set_Booster_42mm_Heat(uint16_t __Booster_42mm_Heat)
+{
+    this->Robot_Power_Heat.Booster_42mm_Heat = __Booster_42mm_Heat;
+}
+#endif
+
+
+
 
 #ifdef GIMBAL
 /**

@@ -27,6 +27,15 @@
 
 /* Exported types ------------------------------------------------------------*/
 
+/**
+ * @brief 吊射模式使能状态
+ *
+ */
+enum Enum_Gimbal_Launch_Mode :uint8_t
+{
+    Launch_Disable = 0, // 非吊射模式
+    Launch_Enable, // 吊射模式
+};
 
 /**
  * @brief 云台控制类型
@@ -38,6 +47,8 @@ enum Enum_Gimbal_Control_Type :uint8_t
     Gimbal_Control_Type_NORMAL,
     Gimbal_Control_Type_MINIPC,
 };
+
+
 
 /**
  * @brief Specialized, yaw轴电机类
@@ -357,6 +368,8 @@ public:
     inline float Get_Target_Pitch_Angle();
     inline Enum_Gimbal_Control_Type Get_Gimbal_Control_Type();
 
+    inline Enum_Gimbal_Launch_Mode Get_Gimbal_Launch_Mode();
+
     inline void Set_Gimbal_Control_Type(Enum_Gimbal_Control_Type __Gimbal_Control_Type);
     inline void Set_Target_Yaw_Angle(float __Target_Yaw_Angle);
     inline void Set_Target_Pitch_Angle(float __Target_Pitch_Angle);
@@ -389,7 +402,8 @@ protected:
 
     //云台状态
     Enum_Gimbal_Control_Type Gimbal_Control_Type = Gimbal_Control_Type_DISABLE ;
-
+    //吊射部署模式
+    Enum_Gimbal_Launch_Mode Gimbal_Launch_Mode = Launch_Disable;
     //读写变量
 
     // yaw轴角度
@@ -406,6 +420,15 @@ protected:
 
 /* Exported function declarations --------------------------------------------*/
 
+/**
+ * @brief 获取吊射部署模式
+ * 
+ * @return Enum_Gimbal_Launch_Mode 
+ */
+Enum_Gimbal_Launch_Mode Class_Gimbal::Get_Gimbal_Launch_Mode()
+{
+    return (Gimbal_Launch_Mode);
+}
 
 
 /**

@@ -99,7 +99,7 @@ void Class_Chariot::Init(float __DR16_Dead_Zone)
         //发射机构
         Booster.Referee = &Referee;
         Booster.Init();
-        //Booster.MiniPC = &MiniPC;
+        Booster.MiniPC = &MiniPC;
 				
         //上位机
         MiniPC.Init(&hfdcan1);
@@ -246,40 +246,94 @@ void Class_Chariot::CAN_Chassis_Rx_Gimbal_Callback_1()
         Booster_bullet_num_before = before_game_bullet_num;
     }
 }
+
+
+float Class_Chariot::Get_Chassis_Coordinate_System_Angle_Rad() // 小陀螺优劣弧优化
+{
+    float Yaw_Angle_Rad;
+    if (Chassis_Logics_Direction == Chassis_Logic_Direction_Positive)
+    {
+        Yaw_Angle_Rad = Motor_Yaw_DM4310.Get_Now_Radian() - Reference_Angle;
+    }
+    else
+    {
+        Yaw_Angle_Rad = Motor_Yaw_DM4310.Get_Now_Radian() - (Reference_Angle + PI);
+    }
+
+    while (Yaw_Angle_Rad > PI)
+        Yaw_Angle_Rad -= PI * 2.0f;
+    while (Yaw_Angle_Rad < -PI)
+        Yaw_Angle_Rad += PI * 2.0f;
+
+    return (Yaw_Angle_Rad);
+}
+
+void Class_Chariot::Control_Chassis_Omega_TIM_PeriodElapsedCallback()
+{
+
+    // 目标角速度
+    float chassis_omega;
+
+    if (Chassis.Get_Chassis_Control_Type() == Chassis_Control_Type_SPIN_Positive)
+        chassis_omega = Chassis.Get_Spin_Omega();
+    else if (Chassis.Get_Chassis_Control_Type() == Chassis_Control_Type_SPIN_Negative)
+        chassis_omega = -Chassis.Get_Spin_Omega();
+
+    if (Chassis.Get_Chassis_Control_Type() == Chassis_Control_Type_FLLOW)
+    {
+        PID_Chassis_Fllow.Set_Target(0);
+        PID_Chassis_Fllow.Set_Now(Chassis_SglRound_Angle);
+        PID_Chassis_Fllow.TIM_Adjust_PeriodElapsedCallback();
+        chassis_omega = -PID_Chassis_Fllow.Get_Out();
+    }
+
+    if (Chassis.Get_Chassis_Control_Type() == Chassis_Control_Type_DISABLE)
+    {
+        chassis_omega = 0;
+    }
+
+    Chassis.Set_Target_Omega(chassis_omega);
+    //Force_Control_Chassis.Set_Target_Omega(chassis_omega);
+}
 #endif
+
 
 /**
  * @brief can回调函数处理底盘发来的数据
  *
  */
 #ifdef GIMBAL
+
 void Class_Chariot::CAN_Gimbal_Rx_Chassis_Callback()
 {
     Chassis_Alive_Flag++;
-
     Enum_Referee_Data_Robots_ID robo_id;
     Enum_Referee_Game_Status_Stage game_stage;
-    uint16_t Shooter_Barrel_Heat;
-    uint16_t Shooter_Barrel_Heat_Limit;
-    uint16_t tmp_shooter_speed;
-    float Shooter_Speed;
-    robo_id = (Enum_Referee_Data_Robots_ID)CAN_Manage_Object->Rx_Buffer.Data[0];
-    game_stage = (Enum_Referee_Game_Status_Stage)CAN_Manage_Object->Rx_Buffer.Data[1];
-    memcpy(&Shooter_Barrel_Heat_Limit, CAN_Manage_Object->Rx_Buffer.Data + 2, sizeof(uint16_t));
-    memcpy(&Shooter_Barrel_Heat, CAN_Manage_Object->Rx_Buffer.Data + 4, sizeof(uint16_t));
-    memcpy(&tmp_shooter_speed, CAN_Manage_Object->Rx_Buffer.Data + 6, sizeof(uint16_t));
-    Shooter_Speed = tmp_shooter_speed / 10.0f;
+    int16_t shoot_speed;
+    memcpy(&robo_id, CAN_Manage_Object->Rx_Buffer.Data, sizeof(uint8_t));
+    memcpy(&game_stage, CAN_Manage_Object->Rx_Buffer.Data + 1, sizeof(uint8_t));
+    memcpy(&shoot_speed, CAN_Manage_Object->Rx_Buffer.Data + 2, sizeof(int16_t));
     Referee.Set_Robot_ID(robo_id);
-    Referee.Set_Booster_17mm_1_Heat(Shooter_Barrel_Heat);
-    Referee.Set_Booster_17mm_1_Heat_Max(Shooter_Barrel_Heat_Limit);
     Referee.Set_Game_Stage(game_stage);
-    Referee.Set_Booster_Speed(Shooter_Speed);
+    Booster.Set_Referee_Bullet_Velocity((float)shoot_speed / 1000.0f);
+    MiniPC.Set_Bullet_Speed((float)shoot_speed / 1000.0f);
 }
+
 void Class_Chariot::CAN_Gimbal_Rx_Chassis_Callback_1()
 {
-    uint16_t tmp_heat;
-    memcpy(&tmp_heat, &CAN_Manage_Object->Rx_Buffer.Data[2], sizeof(uint16_t));
-    // Booster.set_heat(tmp_heat);
+    Chassis_Alive_Flag++;
+    uint16_t Shooter_Barrel_Heat;
+    uint16_t Shooter_Barrel_Heat_Limit;
+    uint16_t Shooter_Heat_CD;
+    Enum_Referee_Status referee_status;
+    memcpy(&referee_status, CAN_Manage_Object->Rx_Buffer.Data, sizeof(uint8_t));
+    memcpy(&Shooter_Barrel_Heat_Limit, CAN_Manage_Object->Rx_Buffer.Data + 2, sizeof(uint16_t));
+    memcpy(&Shooter_Barrel_Heat, CAN_Manage_Object->Rx_Buffer.Data + 4, sizeof(uint16_t));
+    memcpy(&Shooter_Heat_CD, CAN_Manage_Object->Rx_Buffer.Data + 6, sizeof(uint16_t));
+    Referee.Set_Booster_42mm_Heat(Shooter_Barrel_Heat);
+    Referee.Set_Booster_42mm_Heat_Max(Shooter_Barrel_Heat_Limit);
+    Referee.Referee_Status = referee_status;
+    Booster.Set_Cooling_Value(Shooter_Heat_CD);
 }
 #endif
 
@@ -707,6 +761,8 @@ void Class_Chariot::Transform_Mouse_Axis()
  * @brief 云台控制逻辑
  *
  */
+float Dt6;
+uint32_t last_cnt6;
 #ifdef GIMBAL
 float minipc_yaw_offset = -5.0f;
 
@@ -935,109 +991,178 @@ void Class_Chariot::Control_Gimbal()
  * @brief 发射机构控制逻辑
  *
  */
+int Booster_Sign = 0;
+float Dt2;
+uint32_t last_cnt2 = 0;
+static uint8_t Switch_Flag_1 = 0;
+static uint8_t change_type = 1;
 #ifdef GIMBAL
 void Class_Chariot::Control_Booster()
 {
+    static uint8_t booster_sign = 0;
     // 先判断当前活动的控制器
     Judge_Active_Controller();
 
     /************************************遥控器控制逻辑*********************************************/
     if (Active_Controller == Controller_DR16 && DR16_Control_Type == DR16_Control_Type_REMOTE)
     {
-        // 左上 开启摩擦轮和发射机构
-        if (DR16.Get_Right_Switch() == DR16_Switch_Status_UP)
-        {Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
+        volatile int DR16_Left_Switch_Status = DR16.Get_Left_Switch();
+        volatile int DR16_Right_Switch_Status = DR16.Get_Right_Switch();
+        switch (DR16_Right_Switch_Status)
+        {
+        case (DR16_Switch_Status_UP): // 右上 开启摩擦轮和发射机构
+        {
+            Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
             Booster.Set_Friction_Control_Type(Friction_Control_Type_ENABLE);
-            Fric_Status = Fric_Status_OPEN;
+            if (DR16_Left_Switch_Status == DR16_Switch_Status_DOWN) // 左下
+            {
+                Dt2 = DWT_GetDeltaT(&last_cnt2);
 
-            if(DR16.Get_Left_Switch() == DR16_Switch_Status_DOWN)
-            {         //自瞄模式火控 上位机控制打弹
-                if(MiniPC.Get_Fire_Status() == 1 && MiniPC.Get_MiniPC_Status() == MiniPC_Data_Status_ENABLE){
-                     Booster.Set_Booster_Control_Type(Booster_Control_Type_SINGLE);
-                    //Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
+                // 静态变量记录上次开火时间
+                static uint32_t last_fire_time = 0;
+
+                // 获取当前系统时间（毫秒）
+                uint32_t now = HAL_GetTick();
+
+                // 开火条件：Fire 有效、冷却完成、热量允许
+                if (MiniPC.Get_Mode() == 2 && 
+                    (now - last_fire_time) >= 1000 &&
+                    Booster.Cmd_if_Fire == 1 && MiniPC.Get_MiniPC_Status() == MiniPC_Status_ENABLE) // 假设热量上限为100
+                {
+                    Booster.Set_Booster_Control_Type(Booster_Control_Type_SINGLE);
+                    last_fire_time = now;
                 }
             }
             else
             {
-                if (DR16.Get_Yaw() > -0.2f && DR16.Get_Yaw() < 0.2f)
+                if (DR16.Get_Yaw() < 0.2 && DR16.Get_Yaw() > -0.2)
                 {
-                    Shoot_Flag = 0;
+                    booster_sign = 0;
                 }
-                if (DR16.Get_Yaw() < -0.8f && Shoot_Flag == 0) // 单发
+                else if (DR16.Get_Yaw() > 0.8 && booster_sign == 0)
                 {
                     Booster.Set_Booster_Control_Type(Booster_Control_Type_SINGLE);
-                    Shoot_Flag = 1;
+                    booster_sign = 1;
                 }
-                if (DR16.Get_Yaw() > 0.8f && Shoot_Flag == 0) // 五连发
+            }
+            break;
+        }
+        case (DR16_Switch_Status_MIDDLE):
+        {
+            Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
+            Booster.Set_Friction_Control_Type(Friction_Control_Type_DISABLE);
+            break;
+        }
+        case (DR16_Switch_Status_DOWN):
+        {
+            Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
+            Booster.Set_Friction_Control_Type(Friction_Control_Type_DISABLE);
+            break;
+        }
+        }
+        switch (DR16_Left_Switch_Status)
+        {
+        case (DR16_Switch_Status_UP):
+        {
+            // Booster.Set_Shooter_Mode(Launcher);
+            // MiniPC_Mode = MiniPC_RADAR;
+            break;
+        }
+        case (DR16_Switch_Status_MIDDLE):
+        {
+            Booster.Set_Shooter_Mode(Normal);
+            MiniPC_Mode = MiniPC_DISABLE;
+            break;
+        }
+        case (DR16_Switch_Status_DOWN):
+        {
+            Booster.Set_Shooter_Mode(Aimer);
+            MiniPC_Mode = MiniPC_AIMER;
+            break;
+        }
+        }
+    }
+    else if (Active_Controller == Controller_VT13 && VT13_Control_Type == VT13_Control_Type_REMOTE)
+    {
+
+        Dt6 = 1.0f / DWT_GetDeltaT(&last_cnt6);
+
+        if (VT13.Get_Switch() != VT13_Switch_Status_Right)
+        {
+            if (VT13.Get_Button_Left() == VT13_Button_TRIG_FREE_PRESSED)
+            {
+                if (Fric_Status == Fric_Status_OPEN)
                 {
-                    Booster.Set_Booster_Control_Type(Booster_Control_Type_MULTI);
-                    Shoot_Flag = 1;
+                    Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
+                    Booster.Set_Friction_Control_Type(Friction_Control_Type_DISABLE);
+                    Fric_Status = Fric_Status_CLOSE;
+                }
+                else
+                {
+                    Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
+                    Booster.Set_Friction_Control_Type(Friction_Control_Type_ENABLE);
+                    Fric_Status = Fric_Status_OPEN;
+                }
+            }
+            if (Fric_Status == Fric_Status_OPEN)
+            {
+                if (VT13.Get_Button_Right() == VT13_Button_PRESSED)
+                {
+                    // 自瞄模式
+                    //  静态变量记录上次开火时间
+                    static uint32_t last_fire_time = 0;
+
+                    // 当前 Fire 信号
+                    uint8_t current_fire = MiniPC.Get_Fire_Status();
+
+                    // 获取当前系统时间（毫秒）
+                    uint32_t now = HAL_GetTick();
+
+                    // 开火条件：Fire 有效、冷却完成、热量允许
+                    if (current_fire == 1 &&
+                        (now - last_fire_time) >= 500 &&
+                        Booster.Cmd_if_Fire == 1 && MiniPC.Get_MiniPC_Status() == MiniPC_Status_ENABLE) // 假设热量上限为100
+                    {
+                        Booster.Set_Booster_Control_Type(Booster_Control_Type_SINGLE);
+                        last_fire_time = now;
+                    }
+                }
+                if (VT13.Get_Yaw() < 0.2 && VT13.Get_Yaw() > -0.2)
+                {
+                    booster_sign = 0;
+                }
+                if (VT13.Get_Yaw() < -0.8 && booster_sign == 0)
+                {
+                    Booster.Set_Booster_Control_Type(Booster_Control_Type_SINGLE);
+                    booster_sign = 1;
                 }
             }
         }
-        else
+        else if (VT13.Get_Switch() == VT13_Switch_Status_Right)
         {
             Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
             Booster.Set_Friction_Control_Type(Friction_Control_Type_DISABLE);
             Fric_Status = Fric_Status_CLOSE;
         }
-    }
-    else if (Active_Controller == Controller_VT13 && VT13_Control_Type == VT13_Control_Type_REMOTE)
-    {
-        // 开启摩擦轮和发射机构
-        if (VT13.Get_Button_Left() == VT13_Button_TRIG_FREE_PRESSED)
+
+        if (VT13.Get_Switch() == VT13_Switch_Status_Left)
         {
-            if (Fric_Status == Fric_Status_OPEN)
-            {
-                Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
-                Booster.Set_Friction_Control_Type(Friction_Control_Type_DISABLE);
-                Fric_Status = Fric_Status_CLOSE;
-            }
-            else
-            {
-                Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
-                Booster.Set_Friction_Control_Type(Friction_Control_Type_ENABLE);
-                Fric_Status = Fric_Status_OPEN;
-            }
+            Booster.Set_Shooter_Mode(Launcher);
+            MiniPC_Mode = MiniPC_RADAR;
         }
-        if (Fric_Status == Fric_Status_OPEN)
+        else
         {
-            if (VT13.Get_Yaw() > -0.2f && VT13.Get_Yaw() < 0.2f)
-            {
-                Shoot_Flag = 0;
-            }
-            if (VT13.Get_Yaw() < -0.8f && Shoot_Flag == 0) // 单发
-            {
-                Booster.Set_Booster_Control_Type(Booster_Control_Type_SINGLE);
-                Shoot_Flag = 1;
-            }
-            if (VT13.Get_Yaw() > 0.8f && Shoot_Flag == 0) // 五连发
-            {
-                Booster.Set_Booster_Control_Type(Booster_Control_Type_MULTI);
-                Shoot_Flag = 1;
-            }
+            Booster.Set_Shooter_Mode(Normal);
+            MiniPC_Mode = MiniPC_DISABLE;
         }
     }
     /************************************键鼠控制逻辑*********************************************/
     else if ((Active_Controller == Controller_DR16 && DR16_Control_Type == DR16_Control_Type_KEYBOARD) ||
              (Active_Controller == Controller_VT13 && VT13_Control_Type == VT13_Control_Type_KEYBOARD))
     {
-        // 分别处理DR16和VT13遥控器
         if (Active_Controller == Controller_DR16)
         {
-
-            if (DR16.Get_Keyboard_Key_B() == DR16_Key_Status_TRIG_FREE_PRESSED)
-            {
-                if (Booster.Booster_User_Control_Type == Booster_User_Control_Type_SINGLE)
-                {
-                    Booster.Booster_User_Control_Type = Booster_User_Control_Type_MULTI;
-                }
-                else
-                {
-                    Booster.Booster_User_Control_Type = Booster_User_Control_Type_SINGLE;
-                }
-            }
-            // 按下ctrl键 开启摩擦轮
+            // 按下ctrl键 切换摩擦轮状态
             if (DR16.Get_Keyboard_Key_Ctrl() == DR16_Key_Status_TRIG_FREE_PRESSED)
             {
                 if (Fric_Status == Fric_Status_CLOSE)
@@ -1051,57 +1176,58 @@ void Class_Chariot::Control_Booster()
                     Fric_Status = Fric_Status_CLOSE;
                 }
             }
-
-            // 按下鼠标左键 单发
-            if (Booster.Get_Friction_Control_Type() == Friction_Control_Type_ENABLE)
+            // 长按鼠标右键自瞄
+            if (DR16.Get_Mouse_Right_Key() == DR16_Key_Status_PRESSED)
             {
-                if (Booster.Booster_User_Control_Type == Booster_User_Control_Type_SINGLE)
+                if (Fric_Status == Fric_Status_OPEN)
                 {
-                    if (DR16.Get_Mouse_Left_Key() == DR16_Key_Status_TRIG_FREE_PRESSED)
+                    // 按下Q键自瞄控制打弹
+                    if (DR16.Get_Keyboard_Key_Q() == DR16_Key_Status_TRIG_FREE_PRESSED)
                     {
+                        // 自瞄模式
+                        //  静态变量记录上次开火时间
+                        static uint32_t last_fire_time = 0;
+
+                        // 当前 Fire 信号
+                        uint8_t current_fire = MiniPC.Get_Fire_Status();
+
+                        // 获取当前系统时间（毫秒）
+                        uint32_t now = HAL_GetTick();
+
+                        // 开火条件：Fire 有效、冷却完成、热量允许
+                        if (current_fire == 1 &&
+                            (now - last_fire_time) >= 500 &&
+                            Booster.Cmd_if_Fire == 1 && MiniPC.Get_MiniPC_Status() == MiniPC_Status_ENABLE) // 假设热量上限为100
+                        {
+                            Booster.Set_Booster_Control_Type(Booster_Control_Type_SINGLE);
+                            last_fire_time = now;
+                        }
+                    }
+                    else if (DR16.Get_Mouse_Left_Key() == DR16_Key_Status_TRIG_FREE_PRESSED && Booster.Cmd_if_Fire == 1)
+                    {
+                        // 单发
                         Booster.Set_Booster_Control_Type(Booster_Control_Type_SINGLE);
                     }
-                }
-                if (Booster.Booster_User_Control_Type == Booster_User_Control_Type_MULTI)
-                {
-                    if (DR16.Get_Mouse_Left_Key() == DR16_Key_Status_PRESSED)
-                    {
-                        Booster.Set_Booster_Control_Type(Booster_Control_Type_REPEATED);
-                    }
                     else
+                    {
                         Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
+                    }
                 }
+            }
+            // 鼠标左键单点控制开火 单发
+            else if ((DR16.Get_Mouse_Left_Key() == DR16_Key_Status_TRIG_FREE_PRESSED) && Fric_Status == Fric_Status_OPEN && Booster.Cmd_if_Fire == 1)
+            {
+                // 单发
+                Booster.Set_Booster_Control_Type(Booster_Control_Type_SINGLE);
             }
             else
             {
                 Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
             }
         }
-        else if (Active_Controller == Controller_VT13)
+        if (Active_Controller == Controller_VT13)
         {
-            if (VT13.Get_Keyboard_Key_B() == VT13_Key_Status_TRIG_FREE_PRESSED)
-            {
-                if (Booster.Booster_User_Control_Type == Booster_User_Control_Type_SINGLE)
-                {
-                    Booster.Booster_User_Control_Type = Booster_User_Control_Type_MULTI;
-                }
-                else
-                {
-                    Booster.Booster_User_Control_Type = Booster_User_Control_Type_SINGLE;
-                }
-            }
-
-            if (VT13.Get_Keyboard_Key_V() == VT13_Key_Status_TRIG_FREE_PRESSED)
-            {
-                if (User_Status == User_Close)
-                {
-                    User_Status = User_Open;
-                }
-                else if (User_Status == User_Open)
-                {
-                    User_Status = User_Close;
-                }
-            }
+            // ========== CTRL 键：控制摩擦轮 ==========
             if (VT13.Get_Keyboard_Key_Ctrl() == VT13_Key_Status_TRIG_FREE_PRESSED)
             {
                 if (Fric_Status == Fric_Status_CLOSE)
@@ -1116,92 +1242,150 @@ void Class_Chariot::Control_Booster()
                 }
             }
 
-            if (Booster.Get_Friction_Control_Type() == Friction_Control_Type_ENABLE)
+            // ========== 切换射击模式（Normal ↔ Launcher） ==========
+            if (Gimbal.Get_Gimbal_Launch_Mode() == Launch_Enable)
             {
-                if (VT13.Get_Mouse_Right_Key() == VT13_Key_Status_PRESSED)
-                {
-                    if (User_Status == User_Close)
-                    {
-						if(Referee.Get_Booster_17mm_1_Heat() + 30 < Referee.Get_Booster_17mm_1_Heat_Max())
-						{
-							
-                        if (VT13.Get_Mouse_Left_Key() == VT13_Key_Status_PRESSED && MiniPC.Get_Fire_Status() == 1 && MiniPC.Get_MiniPC_Status() == MiniPC_Data_Status_ENABLE)
-                        {
-                            Booster.Set_Booster_Control_Type(Booster_Control_Type_SINGLE);
-                        }
-						
-					    }
-                    }
-                    else
-                    {
-                        if (Booster.Booster_User_Control_Type == Booster_User_Control_Type_SINGLE)
-                        {
-                            if (VT13.Get_Mouse_Left_Key() == VT13_Key_Status_TRIG_FREE_PRESSED)
-                            {
-                                Booster.Set_Booster_Control_Type(Booster_Control_Type_SINGLE);
-                            }
-                        }
-                        if (Booster.Booster_User_Control_Type == Booster_User_Control_Type_MULTI)
-                        {
-                            if (VT13.Get_Mouse_Left_Key() == VT13_Key_Status_PRESSED)
-                            {
-                                Booster.Set_Booster_Control_Type(Booster_Control_Type_REPEATED);
-                            }
-                            else
-                                Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
-                        }
-                    }
-                }
-                else
-                {
-                    if (Booster.Booster_User_Control_Type == Booster_User_Control_Type_SINGLE)
-                    {
-                        if (VT13.Get_Mouse_Left_Key() == VT13_Key_Status_TRIG_FREE_PRESSED)
-                        {
-                            Booster.Set_Booster_Control_Type(Booster_Control_Type_SINGLE);
-                        }
-                    }
-                    if (Booster.Booster_User_Control_Type == Booster_User_Control_Type_MULTI)
-                    {
-                        if (VT13.Get_Mouse_Left_Key() == VT13_Key_Status_PRESSED)
-                        {
-                            Booster.Set_Booster_Control_Type(Booster_Control_Type_REPEATED);
-                        }
-                        else
-                            Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
-                    }
-                }
+                Booster.Set_Shooter_Mode(Launcher);
             }
             else
             {
-                Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
+                // ========== 右键：仅控制 MiniPC_Mode（自瞄） ==========
+                if (VT13.Get_Mouse_Right_Key() == VT13_Key_Status_PRESSED)
+                {
+                    // 右键长按：打开自瞄模式（仅修改 MiniPC_Mode）
+                    MiniPC_Mode = MiniPC_AIMER;
+                    Booster.Set_Shooter_Mode(Aimer);
+                }
+                else
+                {
+                    // 右键松开：关闭自瞄模式
+                    MiniPC_Mode = MiniPC_DISABLE;
+                    Booster.Set_Shooter_Mode(Normal);
+                }
             }
+            // else
+            // {
+            //     Booster.Set_Shooter_Mode(Normal);
+            // }
+
+            // ========== B 键：在自瞄和吊射之间切换（==========
+            // 仅当右键处于长按状态时才允许 B 键切换（
+            if (VT13.Get_Mouse_Right_Key() == VT13_Key_Status_PRESSED)
+            {
+                if (VT13.Get_Keyboard_Key_B() == VT13_Key_Status_TRIG_FREE_PRESSED)
+                {
+                    if (Booster.Get_Shooter_Mode() == Aimer)
+                    {
+                        Booster.Set_Shooter_Mode(Launcher);
+                        MiniPC_Mode = MiniPC_RADAR;
+                    }
+                    else if (Booster.Get_Shooter_Mode() == Launcher)
+                    {
+                        Booster.Set_Shooter_Mode(Aimer);
+                        MiniPC_Mode = MiniPC_AIMER;
+                    }
+                }
+            }
+
+            // ========== 根据最终射击模式执行开火逻辑 ==========
+            if (Booster.Get_Shooter_Mode() == Aimer)
+            {
+                // 摩擦轮打开才允许开火
+                if (Fric_Status == Fric_Status_OPEN)
+                {
+                    static uint32_t last_fire_time = 0;
+                    uint32_t now = HAL_GetTick();
+                    // 开火条件：MiniPC 模式为 2（追踪+开火）、冷却完成、热量允许
+                    if (MiniPC.Get_Mode() == 2 &&
+                        (now - last_fire_time) >= 500 &&
+                        Booster.Cmd_if_Fire == 1 &&
+                        MiniPC.Get_MiniPC_Status() == MiniPC_Status_ENABLE)
+                    {
+                        Booster.Set_Booster_Control_Type(Booster_Control_Type_SINGLE);
+                        last_fire_time = now;
+                    }
+                }
+            }
+            // 吊射模式（Launcher）下手动控制打弹
+
+            // ========== 6. 鼠标左键单发（任何射击模式下均可使用） ==========
+            if ((VT13.Get_Mouse_Left_Key() == VT13_Key_Status_TRIG_FREE_PRESSED) && Fric_Status == Fric_Status_OPEN)
+            {
+                Booster.Set_Booster_Control_Type(Booster_Control_Type_SINGLE);
+            }
+            // else
+            // {
+            //     Booster.Set_Booster_Control_Type(Booster_Control_Type_CEASEFIRE);
+            // }
         }
+    }
+
+    // UI显示检测摩擦轮是否开启
+    if (abs(Booster.Fric[0].Get_Now_Omega_Rpm()) > Booster.Get_Friction_Omega_Threshold() &&
+        abs(Booster.Fric[2].Get_Now_Omega_Rpm()) > Booster.Get_Friction_Omega_Threshold())
+    {
+        Fric_Status = Fric_Status_OPEN;
+    }
+    else
+    {
+        Fric_Status = Fric_Status_CLOSE;
+    }
+
+    MiniPC.Set_Lidar_if_Lob(MiniPC_Mode);
+
+    // X 键：在雷达吊射模式（Lidar_if_Lob == 2）下切换吊射点位 0/1
+    if (VT13.Get_Keyboard_Key_X() == VT13_Key_Status_TRIG_FREE_PRESSED)
+    {
+        uint8_t current_point = MiniPC.GetLobPoint();
+        uint8_t new_point = (current_point == 0) ? 1 : 0;
+        MiniPC.SetLobPoint(new_point);
+        MiniPC.SetLobMode(true, new_point);
+    }
+
+    if (VT13.Get_VT13_Status() == VT13_Status_ENABLE && VT13.Get_Switch() == VT13_Switch_Status_Right)
+    {
+        Booster.Set_Booster_Control_Type(Booster_Control_Type_DISABLE);
     }
 }
 #endif
 
 #ifdef CHASSIS
+/**
+ * @brief 底盘给云台发送数据
+ *
+ */
 void Class_Chariot::CAN_Chassis_Tx_Gimbal_Callback()
 {
-    uint16_t Shooter_Barrel_Heat;
-    uint16_t Shooter_Barrel_Heat_Limit;
-    uint16_t Shooter_Speed;
-    Shooter_Barrel_Heat_Limit = Referee.Get_Booster_17mm_1_Heat_Max();
-    Shooter_Barrel_Heat = Referee.Get_Booster_17mm_1_Heat();
-    Shooter_Speed = uint16_t(Referee.Get_Shoot_Speed() * 10);
     // 发送数据给云台
-    CAN2_Chassis_Tx_Gimbal_Data[0] = Referee.Get_ID();
-    CAN2_Chassis_Tx_Gimbal_Data[1] = Referee.Get_Game_Stage();
-    memcpy(CAN2_Chassis_Tx_Gimbal_Data + 2, &Shooter_Barrel_Heat_Limit, sizeof(uint16_t));
-    memcpy(CAN2_Chassis_Tx_Gimbal_Data + 4, &Shooter_Barrel_Heat, sizeof(uint16_t));
-    memcpy(CAN2_Chassis_Tx_Gimbal_Data + 6, &Shooter_Speed, sizeof(uint16_t));
+    uint8_t robot_id, game_state;
+    int16_t shoot_speed, Pos_X, Pos_Y;
+    robot_id = Referee.Get_ID();
+    game_state = Referee.Get_Game_Stage();
+    shoot_speed = (int16_t)(Referee.Get_Shoot_Speed() * 1000.0f);
+    Pos_X = (int16_t)(Referee.Get_Location_X() * 1000.0f);
+    Pos_Y = (int16_t)(Referee.Get_Location_Y() * 1000.0f);
+    memcpy(CAN3_Chassis_Tx_Gimbal_Data, &robot_id, sizeof(uint8_t));
+    memcpy(CAN3_Chassis_Tx_Gimbal_Data + 1, &game_state, sizeof(uint8_t));
+    memcpy(CAN3_Chassis_Tx_Gimbal_Data + 2, &shoot_speed, sizeof(int16_t));
+    memcpy(CAN3_Chassis_Tx_Gimbal_Data + 4, &Pos_X, sizeof(int16_t));
+    memcpy(CAN3_Chassis_Tx_Gimbal_Data + 6, &Pos_Y, sizeof(int16_t));
 }
+
 void Class_Chariot::CAN_Chassis_Tx_Gimbal_Callback_1()
 {
-    uint16_t current_heat;
-    current_heat = Referee.Get_Booster_17mm_1_Heat();
-    memcpy(&CAN2_Chassis_Tx_Gimbal_Data_1[2], &current_heat, sizeof(uint16_t));
+
+    uint16_t Shooter_Barrel_Heat;
+    uint16_t Shooter_Barrel_Heat_Limit;
+    uint16_t Shooter_Heat_CD;
+    Enum_Referee_Status referee_status = Referee.Referee_Status;
+    Shooter_Barrel_Heat_Limit = Referee.Get_Booster_42mm_Heat_Max();
+    Shooter_Barrel_Heat = Referee.Get_Booster_42mm_Heat();
+    Shooter_Heat_CD = Referee.Get_Booster_42mm_Heat_CD();
+    // 发送数据给云台
+    memcpy(CAN3_Chassis_Tx_Gimbal_Data_1, &referee_status, sizeof(uint8_t));
+    memcpy(CAN3_Chassis_Tx_Gimbal_Data_1 + 2, &Shooter_Barrel_Heat_Limit, sizeof(uint16_t));
+    memcpy(CAN3_Chassis_Tx_Gimbal_Data_1 + 4, &Shooter_Barrel_Heat, sizeof(uint16_t));
+    memcpy(CAN3_Chassis_Tx_Gimbal_Data_1 + 6, &Shooter_Heat_CD, sizeof(uint16_t));
 }
 #endif
 /**
@@ -1270,7 +1454,14 @@ void Class_Chariot::TIM_Calculate_PeriodElapsedCallback()
     mod2++;
     if (mod2 == 2)
     {
-        Chassis.TIM_Calculate_PeriodElapsedCallback(Sprint_Status);
+    Chassis_SglRound_Angle = Get_Chassis_Coordinate_System_Angle_Rad();
+    // 底盘给云台发消息
+    CAN_Chassis_Tx_Gimbal_Callback();
+    CAN_Chassis_Tx_Gimbal_Callback_1();
+    // 底盘Omega控制
+    Control_Chassis_Omega_TIM_PeriodElapsedCallback();
+    Chassis.TIM_Calculate_PeriodElapsedCallback(Sprint_Status);
+        //Chassis.TIM_Calculate_PeriodElapsedCallback(Sprint_Status);
         mod2 = 0;
     }
 

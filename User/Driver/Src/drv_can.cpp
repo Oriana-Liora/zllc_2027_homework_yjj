@@ -345,45 +345,34 @@ void TIM_CAN_PeriodElapsedCallback()
 {
     
     #ifdef CHASSIS
-    static uint8_t mod2 = 0,mod100 = 0,mod20 = 0;
-    static uint8_t flag2 = 0;
-    mod2++, mod100++,mod20++;
-    if (mod2 == 2) // 250Hz
+    
+ static uint8_t mod5 = 0,mod100 = 0,mod20 = 0,mod50 = 0,mod10 = 0;
+    mod5++, mod10++, mod20++, mod50++;
+    if (mod5 == 5)  //200Hz
     {
-        mod2 = 0;
-        if (flag2 == 0) 
-        {
-            CAN_Send_Data(&hfdcan1, 0x200, CAN1_0x200_Tx_Data, 8); // 行进3508电机
-            
-        }
-        else
-        {
-            // CAN_Send_Data(&hfdcan2, 0x68, CAN2_Chassis_Tx_Gimbal_Data, 8);
-            // CAN_Send_Data(&hfdcan2, 0x89, CAN2_Chassis_Tx_Gimbal_Data_1, 8);
-        }
-        flag2++;
-        flag2 = flag2 % 2;
-    }
+        mod5 = 0;
+        CAN_Send_Data(&hfdcan1, 0x200, CAN1_0x200_Tx_Data, 8); // 行进3508电机
+        CAN_Send_Data(&hfdcan3, 0x20, CAN3_Chassis_Tx_Gimbal_Data_1, 8);
 
-    if (mod100 == 10) //100Hz
-    {
-        CAN_Send_Data(&hfdcan2, 0x68, CAN2_Chassis_Tx_Gimbal_Data, 8);
-        CAN_Send_Data(&hfdcan2, 0x89, CAN2_Chassis_Tx_Gimbal_Data_1, 8);		
-//        CAN_Send_Data(&hfdcan3, 0x191, CAN3_Chassis_Tx_Data_G, 8);
-        mod100 = 0;
     }
-    if (mod20 == 20) //50Hz
+    if(mod5 == 1) //200Hz
     {
-        //上板
-        //CAN_Send_Data(&hfdcan2, 0x188, CAN3_Chassis_Tx_Data_A, 8);
-//        CAN_Send_Data(&hfdcan3, 0x199, CAN3_Chassis_Tx_Data_B, 8);
-//        CAN_Send_Data(&hfdcan3, 0x178, CAN3_Chassis_Tx_Data_C, 8);      
-//        CAN_Send_Data(&hfdcan3, 0x197, CAN3_Chassis_Tx_Data_E, 8);
-//        CAN_Send_Data(&hfdcan3, 0x198, CAN3_Chassis_Tx_Data_D, 8);
-//        CAN_Send_Data(&hfdcan3, 0x196, CAN3_Chassis_Tx_Data_F, 8);
-        //超电
-        CAN_Send_Data(&hfdcan3, 0x66, CAN_Supercap_Tx_Data, 8);
-        mod20 = 0;
+        //CAN2 超电
+		CAN_Send_Data(&hfdcan2, 0x66, CAN_Supercap_Tx_Data, 8);
+        
+    }
+    if(mod5 == 2) //200Hz
+    {
+        // CAN_Send_Data(&hfdcan2, 0x12+0x100, CAN2_0xxf2_Tx_Data, 8); // 关节电机
+    }
+    if(mod5 == 3)
+    {
+        // CAN_Send_Data(&hfdcan2, 0x11+0x100, CAN2_0xxf1_Tx_Data, 8); // 关节电机
+    }
+    if (mod10 == 10 && (HAL_FDCAN_GetTxFifoFreeLevel(&hfdcan3) > 0)) //100Hz
+    {
+		CAN_Send_Data(&hfdcan3, 0x51, CAN3_Chassis_Tx_Gimbal_Data, 8);
+        mod10 = 0;
     }
     #elif defined (GIMBAL)
         // CAN_Send_Data(&hfdcan2, 0x141, CAN2_0x141_Tx_Data, 8);
@@ -401,9 +390,9 @@ void TIM_CAN_PeriodElapsedCallback()
     if(mod5 == 5)//200Hz
     {
         mod5 = 0;
-        //CAN_Send_Data(&hfdcan2, 0x77, CAN2_Gimbal_Tx_Chassis_Data, 8); //给底盘发送控制命令 按照0x77 ID 发送
-        //CAN_Send_Data(&hfdcan2, 0x78, CAN2_Gimbal_Tx_Chassis_Data_1, 8);
-        
+        // CAN1
+        CAN_Send_Data(&hfdcan1, 0x200, CAN1_0x200_Tx_Data, 8); // 摩擦轮
+        // can3
         CAN_Send_Data(&hfdcan3, 0x52, CAN3_Gimbal_Tx_Chassis_Data, 8); //给底盘发送控制命令
         
     }
@@ -415,6 +404,12 @@ void TIM_CAN_PeriodElapsedCallback()
 			  //CAN_Send_Data(&hfdcan2, 0xf1, CAN2_0xxf1_Tx_Data, 8);
         mod2 = 0;
     } 
+
+    if(mod5 == 3 )
+    {
+        CAN_Send_Data(&hfdcan3, 0x200, CAN3_0x200_Tx_Data, 8); //拨弹盘  按照0x200 ID 发送 可控制多个电机
+    }
+
     if (mod10 == 10 ) //100Hz
     {
 		CAN_Send_Data(&hfdcan3, 0x78, CAN3_Gimbal_Tx_Chassis_Data_1, 8);
