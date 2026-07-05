@@ -332,6 +332,9 @@ protected:
 #endif
  
 #ifdef GIMBAL
+
+    // 角度目标值
+        float tmp_gimbal_yaw, tmp_gimbal_pitch;
     // 遥控器拨动的死区, 0~1
     float DR16_Dead_Zone;
     // 常量

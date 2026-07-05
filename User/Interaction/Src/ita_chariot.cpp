@@ -768,222 +768,195 @@ float minipc_yaw_offset = -5.0f;
 
 void Class_Chariot::Control_Gimbal()
 {
-    // 角度目标值
-    float tmp_gimbal_yaw, tmp_gimbal_pitch;
+// 角度目标值（类成员变量 tmp_gimbal_yaw, tmp_gimbal_pitch）
     // 遥控器摇杆值
-    float dr16_y = 0, dr16_r_y = 0;
+    float dr16_y, dr16_r_y;
     float vt13_y = 0, vt13_r_y = 0;
-    // 获取当前角度值
+    static float Remote_K = 1.5f;
+
     tmp_gimbal_yaw = Gimbal.Get_Target_Yaw_Angle();
     tmp_gimbal_pitch = Gimbal.Get_Target_Pitch_Angle();
 
-    // 先判断当前活动的控制器
     Judge_Active_Controller();
 
-    /************************************遥控器控制逻辑*********************************************/
+    static Enum_Gimbal_Launch_Mode last_launch_mode = Launch_Disable;
+    if (Gimbal.Get_Gimbal_Launch_Mode() != last_launch_mode)
+    {
+        if (Gimbal.Get_Gimbal_Launch_Mode() == Launch_Enable)
+        {
+            float now_enc_yaw = Gimbal.Motor_Yaw_DM4310.Get_True_Angle_Yaw_From_Encoder();
+            float now_enc_pitch = Gimbal.Motor_Pitch_DM4310.Get_True_Angle_Pitch_From_Encoder();
+            Gimbal.Set_Target_Yaw_Angle(now_enc_yaw);
+            Gimbal.Set_Target_Pitch_Angle(now_enc_pitch);
+            tmp_gimbal_yaw = now_enc_yaw;
+            tmp_gimbal_pitch = now_enc_pitch;
+        }
+        else if (Gimbal.Get_Gimbal_Launch_Mode() == Launch_Disable)
+        {
+            float now_imu_yaw = Gimbal.Motor_Yaw_DM4310.Get_True_Angle_Yaw();
+            float now_imu_pitch = Gimbal.Motor_Pitch_DM4310.Get_True_Angle_Pitch();
+            Gimbal.Set_Target_Yaw_Angle(now_imu_yaw);
+            Gimbal.Set_Target_Pitch_Angle(now_imu_pitch);
+            tmp_gimbal_yaw = now_imu_yaw;
+            tmp_gimbal_pitch = now_imu_pitch;
+        }
+        last_launch_mode = Gimbal.Get_Gimbal_Launch_Mode();
+    }
+
+    MiniPC.Set_Yaw_Encoder(Gimbal.Motor_Yaw_DM4310.Get_True_Angle_Yaw_From_Encoder());
+
+    /************************************ 遥控器控制逻辑 ********************************************/
     if (Active_Controller == Controller_DR16 && DR16_Control_Type == DR16_Control_Type_REMOTE)
     {
-        // 排除遥控器死区
         dr16_y = (Math_Abs(DR16.Get_Right_X()) > DR16_Dead_Zone) ? DR16.Get_Right_X() : 0;
         dr16_r_y = (Math_Abs(DR16.Get_Right_Y()) > DR16_Dead_Zone) ? DR16.Get_Right_Y() : 0;
+        tmp_gimbal_yaw -= dr16_y * DR16_Yaw_Angle_Resolution * Remote_K;
+        tmp_gimbal_pitch += dr16_r_y * DR16_Pitch_Angle_Resolution * Remote_K;
 
-        if (DR16.Get_Left_Switch() == DR16_Switch_Status_DOWN) // 左下自瞄
+        if (DR16.Get_Left_Switch() == DR16_Switch_Status_DOWN)
         {
             Gimbal.Set_Gimbal_Control_Type(Gimbal_Control_Type_MINIPC);
+            Gimbal.Set_Gimbal_Launch_Mode(Launch_Disable);
         }
-        else // 非自瞄模式
+        else if (DR16.Get_Left_Switch() == DR16_Switch_Status_UP)
+        {
+            // Gimbal.Set_Gimbal_Control_Type(Gimbal_Control_Type_MINIPC);
+            // Gimbal.Set_Gimbal_Launch_Mode(Launch_Enable);
+        }
+        else
         {
             Gimbal.Set_Gimbal_Control_Type(Gimbal_Control_Type_NORMAL);
-            // 遥控器操作逻辑
-            tmp_gimbal_yaw -= dr16_y * DR16_Yaw_Angle_Resolution;
-            tmp_gimbal_pitch += dr16_r_y * DR16_Pitch_Angle_Resolution;
-        }
-        if (Chassis.Get_Chassis_Control_Type() == Chassis_Control_Type_FLLOW &&
-            DR16.Get_Right_Switch() == DR16_Switch_Status_TRIG_MIDDLE_DOWN) // 随动才能开舵机 右拨中-下 打开舵机
-        {
-            Compare = 1700;
-            Bulletcap_Status = Bulletcap_Status_OPEN;
-        }
-        else if (Chassis.Get_Chassis_Control_Type() == Chassis_Control_Type_FLLOW &&
-                 DR16.Get_Right_Switch() == DR16_Switch_Status_TRIG_DOWN_MIDDLE) // 随动才能开舵机 右拨下-中 关闭舵机
-        {
-            Compare = 400;
-            Bulletcap_Status = Bulletcap_Status_CLOSE;
+            Gimbal.Set_Gimbal_Launch_Mode(Launch_Disable);
         }
     }
     else if (Active_Controller == Controller_VT13 && VT13_Control_Type == VT13_Control_Type_REMOTE)
     {
-        // 排除遥控器死区
         vt13_y = (Math_Abs(VT13.Get_Right_X()) > DR16_Dead_Zone) ? VT13.Get_Right_X() : 0;
         vt13_r_y = (Math_Abs(VT13.Get_Right_Y()) > DR16_Dead_Zone) ? VT13.Get_Right_Y() : 0;
-
-        if (Gimbal.Get_Gimbal_Control_Type() == Gimbal_Control_Type_DISABLE)
-            Gimbal.Set_Gimbal_Control_Type(Gimbal_Control_Type_NORMAL);
-        if (VT13.Get_Button_Right() == VT13_Button_TRIG_FREE_PRESSED) //
-        {
-            if (Gimbal.Get_Gimbal_Control_Type() == Gimbal_Control_Type_NORMAL)
-                Gimbal.Set_Gimbal_Control_Type(Gimbal_Control_Type_MINIPC);
-            else if (Gimbal.Get_Gimbal_Control_Type() == Gimbal_Control_Type_MINIPC)
-                Gimbal.Set_Gimbal_Control_Type(Gimbal_Control_Type_NORMAL);
-
-        }
-
-        // 遥控器操作逻辑
         tmp_gimbal_yaw -= vt13_y * DR16_Yaw_Angle_Resolution;
         tmp_gimbal_pitch += vt13_r_y * DR16_Pitch_Angle_Resolution;
+
+        if (VT13.Get_Switch() == VT13_Switch_Status_Left)
+        {
+            Gimbal.Set_Gimbal_Control_Type(Gimbal_Control_Type_MINIPC);
+            Gimbal.Set_Gimbal_Launch_Mode(Launch_Enable);
+        }
+        else
+        {
+            Gimbal.Set_Gimbal_Control_Type(Gimbal_Control_Type_NORMAL);
+            Gimbal.Set_Gimbal_Launch_Mode(Launch_Disable);
+        }
     }
-    /************************************键鼠控制逻辑*********************************************/
+    /************************************ 键鼠控制逻辑 ********************************************/
     else if ((Active_Controller == Controller_DR16 && DR16_Control_Type == DR16_Control_Type_KEYBOARD) ||
              (Active_Controller == Controller_VT13 && VT13_Control_Type == VT13_Control_Type_KEYBOARD))
     {
-        // 分别处理DR16和VT13遥控器
+        Transform_Mouse_Axis();
         if (Active_Controller == Controller_DR16)
         {
-            if (DR16.Get_Keyboard_Key_Q() == DR16_Key_Status_TRIG_FREE_PRESSED)
-            {
-                tmp_gimbal_pitch = 0;
-            }
-
-            // 长按右键  开启自瞄
+            tmp_gimbal_yaw -= DR16.Get_Mouse_X() * DR16_Mouse_Yaw_Angle_Resolution;
+            tmp_gimbal_pitch += DR16.Get_Mouse_Z() * DR16_Mouse_Pitch_Angle_Resolution;
             if (DR16.Get_Mouse_Right_Key() == DR16_Key_Status_PRESSED)
             {
                 Gimbal.Set_Gimbal_Control_Type(Gimbal_Control_Type_MINIPC);
-
                 if (MiniPC.Get_MiniPC_Status() == MiniPC_Status_ENABLE)
                 {
                     tmp_gimbal_yaw = MiniPC.Get_Rx_Yaw_Angle();
                     tmp_gimbal_pitch = MiniPC.Get_Rx_Pitch_Angle();
-                    if (Chassis.Get_Chassis_Control_Type() == Chassis_Control_Type_SPIN)
-                    {
-                        tmp_gimbal_yaw = MiniPC.Get_Rx_Yaw_Angle();
-                        tmp_gimbal_pitch = MiniPC.Get_Rx_Pitch_Angle();
-                    }
                 }
             }
             else
             {
                 Gimbal.Set_Gimbal_Control_Type(Gimbal_Control_Type_NORMAL);
             }
-            tmp_gimbal_yaw -= DR16.Get_Mouse_X() * DR16_Mouse_Yaw_Angle_Resolution;
-            tmp_gimbal_pitch += DR16.Get_Mouse_Y() * DR16_Mouse_Pitch_Angle_Resolution;
-            //
-
-            // F键按下 一键开关弹舱
-            if (DR16.Get_Keyboard_Key_F() == DR16_Key_Status_TRIG_FREE_PRESSED)
-            {
-                if (Compare == 1700)
-                {
-                    Bulletcap_Status = Bulletcap_Status_CLOSE;
-                    Compare = 400;
-                }
-                else
-                {
-                    Bulletcap_Status = Bulletcap_Status_OPEN;
-                    Compare = 1700;
-                }
-            }
-            // C键按下 一键调头
             if (DR16.Get_Keyboard_Key_C() == DR16_Key_Status_TRIG_FREE_PRESSED)
-            {
                 tmp_gimbal_yaw += 180;
-            }
-            // V键按下 自瞄模式中切换四点和五点模式
-            if (DR16.Get_Keyboard_Key_V() == DR16_Key_Status_TRIG_FREE_PRESSED)
-            {
-
-            }
-            // Z键按下 切换反小陀螺开关
-            // if (DR16.Get_Keyboard_Key_Z() == DR16_Key_Status_TRIG_FREE_PRESSED)
-            // {
-            //     if (Gimbal.MiniPC->Get_Antispin_Type() == Antispin_On)
-            //     {
-            //         Gimbal.MiniPC->Set_Antispin_Type(Antispin_Off);
-            //     }
-            //     else
-            //     {
-            //         Gimbal.MiniPC->Set_Antispin_Type(Antispin_On);
-            //     }
-            // }
-            // G键按下切换Pitch锁定模式和free模式
-            if (DR16.Get_Keyboard_Key_G() == DR16_Key_Status_TRIG_FREE_PRESSED)
-            {
-                if (Pitch_Control_Status == Pitch_Status_Control_Free)
-                    Pitch_Control_Status = Pitch_Status_Control_Lock;
-                else
-                    Pitch_Control_Status = Pitch_Status_Control_Free;
-            }
         }
-        else if (Active_Controller == Controller_VT13)
+        if (Active_Controller == Controller_VT13)
         {
-            if (VT13.Get_Keyboard_Key_Q() == VT13_Key_Status_TRIG_FREE_PRESSED)
+            if (VT13.Get_Keyboard_Key_Shift() != VT13_Key_Status_PRESSED)
             {
-                tmp_gimbal_pitch = 0;
+                tmp_gimbal_yaw -= VT13.Get_Mouse_X() * DR16_Mouse_Yaw_Angle_Resolution;
+                tmp_gimbal_pitch += VT13.Get_Mouse_Z() * DR16_Mouse_Pitch_Angle_Resolution;
             }
-
-            // 长按右键  开启自瞄
             if (VT13.Get_Mouse_Right_Key() == VT13_Key_Status_PRESSED)
-            {
                 Gimbal.Set_Gimbal_Control_Type(Gimbal_Control_Type_MINIPC);
-
-                if (MiniPC.Get_MiniPC_Status() == MiniPC_Status_ENABLE)
-                {
-                    tmp_gimbal_yaw = MiniPC.Get_Rx_Yaw_Angle();
-                    tmp_gimbal_pitch = MiniPC.Get_Rx_Pitch_Angle();
-                    if (Chassis.Get_Chassis_Control_Type() == Chassis_Control_Type_SPIN)
-                    {
-                        tmp_gimbal_yaw = MiniPC.Get_Rx_Yaw_Angle();
-                        tmp_gimbal_pitch = MiniPC.Get_Rx_Pitch_Angle();
-                    }
-                }
-            }
             else
-            {
                 Gimbal.Set_Gimbal_Control_Type(Gimbal_Control_Type_NORMAL);
-            }
-            tmp_gimbal_yaw -= VT13.Get_Mouse_X() * DR16_Mouse_Yaw_Angle_Resolution;
-            tmp_gimbal_pitch += VT13.Get_Mouse_Y() * DR16_Mouse_Pitch_Angle_Resolution;
-
-            // C键按下 一键调头
             if (VT13.Get_Keyboard_Key_C() == VT13_Key_Status_TRIG_FREE_PRESSED)
             {
+                if (Chassis_Logics_Direction == Chassis_Logic_Direction_Positive)
+                    Chassis_Logics_Direction = Chassis_Logic_Direction_Negative;
+                else
+                    Chassis_Logics_Direction = Chassis_Logic_Direction_Positive;
                 tmp_gimbal_yaw += 180;
             }
-
-            // Z键按下 切换反小陀螺开关
-            // if (VT13.Get_Keyboard_Key_Z() == VT13_Key_Status_TRIG_FREE_PRESSED)
-            // {
-            //     if (Gimbal.MiniPC->Get_Antispin_Type() == Antispin_On)
-            //     {
-            //         Gimbal.MiniPC->Set_Antispin_Type(Antispin_Off);
-            //     }
-            //     else
-            //     {
-            //         Gimbal.MiniPC->Set_Antispin_Type(Antispin_On);
-            //     }
-            // }
-            // V键按下 自瞄模式中切换四点和五点模式
             if (VT13.Get_Keyboard_Key_V() == VT13_Key_Status_TRIG_FREE_PRESSED)
             {
-
+                if (Gimbal.Get_Gimbal_Launch_Mode() == Launch_Disable)
+                {
+                    Gimbal.Set_Gimbal_Launch_Mode(Launch_Enable);
+                    MiniPC.SetLobMode(true, 0);
+                }
+                else
+                {
+                    Gimbal.Set_Gimbal_Launch_Mode(Launch_Disable);
+                    MiniPC.SetLobMode(false, 0);
+                }
             }
-            // G键按下切换Pitch锁定模式和free模式
-            // if (VT13.Get_Keyboard_Key_G() == VT13_Key_Status_TRIG_FREE_PRESSED)
-            // {
-            //     if (Pitch_Control_Status == Pitch_Status_Control_Free)
-            //         Pitch_Control_Status = Pitch_Status_Control_Lock;
-            //     else
-            //         Pitch_Control_Status = Pitch_Status_Control_Free;
-            // }
         }
     }
 
-    // 如果pitch为锁定状态
-    if (Pitch_Control_Status == Pitch_Status_Control_Lock)
-        tmp_gimbal_pitch = 0;
+    /************************************ 统一的自瞄基准角度计算（对所有模式生效） ********************************/
+    float base_yaw = tmp_gimbal_yaw;
+    float base_pitch = tmp_gimbal_pitch;
 
-    // 设定角度
+    if (Gimbal.Get_Gimbal_Control_Type() == Gimbal_Control_Type_MINIPC &&
+        MiniPC.Get_MiniPC_Status() != MiniPC_Status_DISABLE)
+    {
+        uint8_t mode = MiniPC.Get_Mode();
+        if (Gimbal.Get_Gimbal_Launch_Mode() == Launch_Enable && MiniPC.Get_Lidar_Lob_Stability() == 1)
+        {
+            // 吊射模式：强制使用 MiniPC 角度
+            base_yaw = MiniPC.Get_Rx_Yaw_Angle();
+            base_pitch = MiniPC.Get_Rx_Pitch_Angle();
+        }
+        else
+        {
+            // 非吊射模式：只在 mode != 0 时使用 MiniPC 角度，mode == 0 时保持用户输入
+            if (mode != 0)
+            {
+                base_yaw = MiniPC.Get_Rx_Yaw_Angle();
+                base_pitch = MiniPC.Get_Rx_Pitch_Angle();
+            }
+        }
+    }
+
+    /************************************ VT13 键鼠 + 吊射模式下的 WASD 微调 ********************************/
+    if (Active_Controller == Controller_VT13 &&
+        VT13_Control_Type == VT13_Control_Type_KEYBOARD &&
+        Gimbal.Get_Gimbal_Launch_Mode() == Launch_Enable)
+    {
+        if (VT13.Get_Keyboard_Key_W() == VT13_Key_Status_PRESSED)
+            base_pitch += 0.05f;
+        if (VT13.Get_Keyboard_Key_S() == VT13_Key_Status_PRESSED)
+            base_pitch -= 0.05f;
+        if (VT13.Get_Keyboard_Key_A() == VT13_Key_Status_PRESSED)
+            base_yaw += 0.037f;
+        if (VT13.Get_Keyboard_Key_D() == VT13_Key_Status_PRESSED)
+            base_yaw -= 0.037;
+    }
+
+    tmp_gimbal_yaw = base_yaw;
+    tmp_gimbal_pitch = base_pitch;
+
     Gimbal.Set_Target_Yaw_Angle(tmp_gimbal_yaw);
     Gimbal.Set_Target_Pitch_Angle(tmp_gimbal_pitch);
+
+    if (VT13.Get_VT13_Status() == VT13_Status_ENABLE && VT13.Get_Switch() == VT13_Switch_Status_Right)
+        Gimbal.Set_Gimbal_Control_Type(Gimbal_Control_Type_DISABLE);
+
+
 }
 #endif
 

@@ -181,6 +181,8 @@ void Chassis_Device_CAN3_Callback(Struct_CAN_Rx_Buffer *CAN_RxMessage)
  * @brief MiniPC直接绑定CAN1通道，不按照形参顺序走
  * @param CAN_RxMessage CAN1收到的消息
  */
+uint32_t cnt_last = 0;
+float dt;
 void Gimbal_Device_CAN1_Callback(Struct_CAN_Rx_Buffer *CAN_RxMessage)
 {
     switch (CAN_RxMessage->Header.Identifier)
@@ -248,16 +250,6 @@ void Gimbal_Device_CAN2_Callback(Struct_CAN_Rx_Buffer *CAN_RxMessage)
 			    DtYAW = 1.0f/DWT_GetDeltaT(&last_cntyaw);
             }
             chariot.Gimbal.Motor_Yaw.CAN_RxCpltCallback(CAN_RxMessage->Data);
-        }
-        break;
-        case(0x68)://与下板进行通讯
-        {
-            chariot.CAN_Gimbal_Rx_Chassis_Callback();//利用can通信，让云台接收底盘的回调信息
-        }
-        break;
-        case (0x89):
-        {
-            chariot.CAN_Gimbal_Rx_Chassis_Callback_1();
         }
         break;
         case(0xA1):
@@ -440,22 +432,27 @@ void Task100us_TIM4_Callback()
     }
     //chariot.Boardc_BMI.TIM_Calculate_PeriodElapsedCallback();
     #elif defined(GIMBAL)
-    // 单给IMU消息开的定时器 ims
-    Dtm = 1.0f/DWT_GetDeltaT(&last_cntm);
-    chariot.Gimbal.Boardc_BMI.TIM_Calculate_PeriodElapsedCallback();    
-    // static uint16_t mod5 = 0;
-    // static uint8_t mod2 = 0;
-    // if (mod5 % 50 == 1)
-    // {
-    //     mod5 = 0;
-    //     mod2++;
-    //     if(mod2%2 == 0)
-    //         chariot.Gimbal.DM_IMU.IMU_RequestData(&hfdcan3,0x01,2);
-    //     else
-    //         chariot.Gimbal.DM_IMU.IMU_RequestData(&hfdcan3,0x01,3);
-            
-    // }
-    // mod5++;
+     dt = DWT_GetDeltaT(&cnt_last);
+        // 单给IMU消息开的定时器 ims
+        chariot.Gimbal.Boardc_BMI.TIM_Calculate_PeriodElapsedCallback();
+        static uint8_t mod2 = 0;  
+        mod2++;
+        if(mod2%2 == 0)
+        {
+            // chariot.Gimbal.dmIMU.IMU_RequestData(&hfdcan2,0x01,2);
+        }
+        else
+        {
+            // chariot.Gimbal.dmIMU.IMU_RequestData(&hfdcan2,0x01,3);
+        }
+
+    static int mod100 = 0;
+    mod100++;
+    if(mod100 = 100)
+    {
+        mod100 = 0;
+    }
+
     #endif
 }
 

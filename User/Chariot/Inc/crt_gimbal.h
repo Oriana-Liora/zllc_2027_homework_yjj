@@ -364,6 +364,8 @@ public:
 
     void Init();
 
+    inline void Set_Gimbal_Launch_Mode(Enum_Gimbal_Launch_Mode __Gimbal_Launch_Mode);
+
     inline float Get_Target_Yaw_Angle();
     inline float Get_Target_Pitch_Angle();
     inline Enum_Gimbal_Control_Type Get_Gimbal_Control_Type();
@@ -489,6 +491,15 @@ void Class_Gimbal::Set_Target_Pitch_Angle(float __Target_Pitch_Angle)
     Target_Pitch_Angle = __Target_Pitch_Angle;
 }
 
+/**
+ * @brief 设定吊射部署模式
+ * 
+ * @param __Gimbal_Launch_Mode 
+ */
+void Class_Gimbal::Set_Gimbal_Launch_Mode(Enum_Gimbal_Launch_Mode __Gimbal_Launch_Mode)
+{
+    Gimbal_Launch_Mode = __Gimbal_Launch_Mode;
+}
 
 #endif
 

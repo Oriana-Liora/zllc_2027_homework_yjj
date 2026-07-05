@@ -211,6 +211,7 @@ struct Struct_MiniPC_Tx_Data
 struct Pack_tx_t
 {
     int16_t q[4];
+    float yaw_from_encoder;
 } __attribute__((packed));
 /**
  * @brief 接收数据包
@@ -245,6 +246,7 @@ public:
     inline void SetLobMode(bool enable, uint8_t point = 0);
     inline void SetLobPoint(uint8_t point_) { lob_point = point_; }
     inline void Set_Bullet_Speed(float __Bullet_Speed);
+    inline void Set_Yaw_Encoder(float __Yaw_Encoder);
 
     inline Enum_MiniPC_Status Get_MiniPC_Status();
     //inline Enum_Antispin_Type Get_Antispin_Type();
@@ -358,6 +360,9 @@ protected:
     uint8_t lob_point = 0;  // 吊射点位：0 或 1
     bool lob_exec_enabled = false;   // 下位机是否启用吊射执行
     float Tx_Bullet_Speed;
+    Pack_tx_t Pack_Tx;
+    //Pack_rx_t Pack_Rx;
+
 
     uint8_t Fire;
     uint8_t alive;
@@ -736,6 +741,11 @@ void Class_MiniPC::Transform_Angle_Tx()
 void Class_MiniPC::Set_Bullet_Speed(float __Bullet_Speed)
 {
     Tx_Bullet_Speed = __Bullet_Speed;
+}
+
+void Class_MiniPC::Set_Yaw_Encoder(float __Yaw_Encoder)
+{
+    Pack_Tx.yaw_from_encoder = __Yaw_Encoder;
 }
 
 

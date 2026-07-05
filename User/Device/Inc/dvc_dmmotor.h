@@ -83,7 +83,9 @@ enum Enum_DM_Motor_Control_Method
     DM_Motor_Control_Method_POSITION_OMEGA,
     DM_Motor_Control_Method_OMEGA,
     DM_Motor_Control_Method_MIT_IMU_Angle,
-    DM_Motor_Control_Method_MIT_OPENLOOP
+    DM_Motor_Control_Method_MIT_OPENLOOP,
+    DM_Motor_Control_Method_MIT_Encoder_Position // 电机编码器位置控制模式
+
 };
 /**
  * @brief 达妙电机源数据
@@ -118,6 +120,9 @@ struct Struct_DM_Motor_Rx_Data
     uint16_t Pre_Position;
     int32_t Total_Position;
     int32_t Total_Round;
+     uint16_t Now_Encoder_Position;//数据可能还没有处理过
+     float Now_Omega_after_kalman;//数据可能还没有处理过
+
 };
 
 /**
@@ -137,6 +142,9 @@ public:
     Class_PID PID_Omega;
 
     void Init(FDCAN_HandleTypeDef *hcan, Enum_DM_Motor_ID __CAN_ID, Enum_DM_Motor_Control_Method __Control_Method = DM_Motor_Control_Method_MIT_POSITION, int32_t __Position_Offset = 0, float __Omega_Max = 20.94359f, float __Torque_Max = 10.0f);
+
+    inline uint16_t Get_Now_Encoder_Position();
+    inline void Set_Target_Angle_DEG(float __Target_Angle_DEG);
 
     inline Enum_DM_Motor_Control_Status Get_DM_Motor_Control_Status();
     inline Enum_DM_Motor_Status Get_DM_Motor_Status();
@@ -225,6 +233,11 @@ protected:
     //目标的扭矩
     float Target_Torque = 0.0f;
 
+    //目标的角度, °
+    float Target_Angle_Deg = 0.0f;
+    //目标的速度, °/s
+    float Target_Omega_DEG = 0.0f;
+
     //内部函数
 
     void Data_Process(uint8_t* Rx_Data);
@@ -261,6 +274,16 @@ float Class_DM_Motor_J4310::Get_Now_Radian()
 float Class_DM_Motor_J4310::Get_Now_Angle_Deg()
 {
     return (Data.Now_Angle_Deg);
+}
+
+/**
+ * @brief 获取当前的编码器位置
+ * 
+ * @return float 当前的编码器位置
+ */
+uint16_t Class_DM_Motor_J4310::Get_Now_Encoder_Position()
+{
+    return (Data.Now_Encoder_Position);
 }
 
 /**
@@ -471,6 +494,17 @@ void Class_DM_Motor_J4310::Limit_Out()
         		
 	}
 }
+
+/**
+ * @brief 设定目标的角度, °
+ *
+ * @param __Target_Angle 目标的角度, °
+ */
+void Class_DM_Motor_J4310::Set_Target_Angle_DEG(float __Target_Angle_Deg)
+{
+    Target_Angle_Deg = __Target_Angle_Deg;
+}
+
 
 #endif
 
